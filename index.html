@@ -1,0 +1,2200 @@
+<!DOCTYPE html>
+<html lang="zh-TW" class="h-full bg-slate-900 text-slate-100">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>股票庫存與每日總值即時查詢系統</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            slate: {
+              850: '#151e2e',
+              900: '#0f172a',
+              950: '#080d1a',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Microsoft JhengHei", "PingFang TC", sans-serif;
+    }
+    /* Custom scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #0f172a;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #475569;
+    }
+  </style>
+</head>
+<body class="h-full flex flex-col overflow-x-hidden antialiased selection:bg-blue-600 selection:text-white">
+
+  <!-- Toast Notification Container -->
+  <div id="toast" class="fixed top-5 right-5 z-50 transform transition-all duration-300 translate-y-[-100px] opacity-0 pointer-events-none flex items-center gap-2 bg-blue-600 text-white px-4 py-3 rounded-xl shadow-2xl border border-blue-400/30">
+    <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+    <span id="toast-msg" class="text-sm font-medium">通知訊息</span>
+  </div>
+
+  <!-- Detail Modal -->
+  <div id="detail-modal" class="fixed inset-0 z-50 hidden bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-slate-850 border border-slate-700/60 rounded-2xl max-w-lg w-full shadow-2xl overflow-hidden transform transition-all">
+      <div class="px-6 py-4 border-b border-slate-800 flex justify-between items-center bg-slate-900/50">
+        <div class="flex items-center gap-3">
+          <span id="modal-code" class="text-xs font-mono font-bold px-2 py-1 bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-md">2330</span>
+          <h3 id="modal-name" class="text-lg font-bold text-white">台積電</h3>
+        </div>
+        <button id="btn-close-modal" class="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div id="modal-body" class="p-6 space-y-4 text-sm text-slate-300">
+        <!-- Injected via JS -->
+      </div>
+      <div class="px-6 py-3 border-t border-slate-800 bg-slate-900/40 flex justify-end">
+        <button id="btn-modal-done" class="px-4 py-2 bg-slate-750 hover:bg-slate-700 text-white text-xs font-semibold rounded-lg transition border border-slate-700">關閉</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Top Navigation Header -->
+  <header class="sticky top-0 z-40 bg-slate-900/90 backdrop-blur border-b border-slate-800 px-4 lg:px-8 py-3.5 flex flex-wrap items-center justify-between gap-4">
+    <div class="flex items-center gap-3">
+      <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center text-white shadow-lg shadow-blue-500/20">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+      </div>
+      <div>
+        <div class="flex items-center gap-2">
+          <h1 class="text-base lg:text-lg font-bold text-white tracking-tight">股票庫存與每日總值即時查詢系統</h1>
+          <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse mr-1.5"></span>2026/10/21 收盤已結算 (台股大漲595點期指結算最新收盤)
+          </span>
+        </div>
+        <p class="text-xs text-slate-400">侯皓程 ＆ 謝汝菁 共同家庭投資組合・雙向連動管理表</p>
+      </div>
+    </div>
+
+    <!-- Actions & Account Switcher -->
+    <div class="flex items-center flex-wrap gap-2.5">
+      <!-- Account Segmented Control -->
+      <div class="flex p-1 bg-slate-950/70 border border-slate-800 rounded-xl">
+        <button data-acc="all" class="acc-btn active px-3.5 py-1.5 rounded-lg text-xs font-semibold transition text-white bg-blue-600 shadow-sm">全戶合計</button>
+        <button data-acc="hou" class="acc-btn px-3.5 py-1.5 rounded-lg text-xs font-semibold transition text-slate-400 hover:text-slate-200">侯皓程</button>
+        <button data-acc="xie" class="acc-btn px-3.5 py-1.5 rounded-lg text-xs font-semibold transition text-slate-400 hover:text-slate-200">謝汝菁</button>
+      </div>
+
+      <!-- Color Scheme Mode Toggle (Taiwan Red=Up/Green=Down vs US Green=Up/Red=Down) -->
+      <button id="btn-color-mode" class="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800/80 hover:bg-slate-750 text-xs font-medium text-slate-300 rounded-xl border border-slate-700/60 transition" title="切換配色習慣">
+        <span id="color-mode-icon">🇹🇼</span>
+        <span id="color-mode-text">台股配色 (紅賺綠賠)</span>
+      </button>
+
+      <!-- Copy Summary Button -->
+      <button id="btn-copy-summary" class="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800/80 hover:bg-slate-750 text-xs font-medium text-slate-300 rounded-xl border border-slate-700/60 transition">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+        複製結算摘要
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Content Container -->
+  <main class="flex-1 max-w-7xl w-full mx-auto p-4 lg:p-8 space-y-6">
+
+    <!-- Overview Metrics Cards Grid -->
+    <section class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3.5">
+      <!-- Card 1: 總資產市值 -->
+      <div class="bg-slate-850 border border-slate-800/80 p-4 rounded-2xl relative overflow-hidden group hover:border-slate-700 transition">
+        <div class="flex items-center justify-between text-xs text-slate-400 mb-1">
+          <span>目前總市值</span>
+          <span class="text-[10px] bg-slate-800 px-1.5 py-0.5 rounded text-slate-300">含美股</span>
+        </div>
+        <div id="card-market-value" class="text-xl lg:text-2xl font-bold text-white tracking-tight">NT$ 44,577,095</div>
+        <div id="card-daily-change" class="text-xs font-semibold mt-1 flex items-center gap-1">
+          <!-- Filled by JS -->
+        </div>
+      </div>
+
+      <!-- Card 2: 總投入成本 -->
+      <div class="bg-slate-850 border border-slate-800/80 p-4 rounded-2xl group hover:border-slate-700 transition">
+        <div class="text-xs text-slate-400 mb-1">總投入成本</div>
+        <div id="card-total-cost" class="text-xl lg:text-2xl font-bold text-white tracking-tight">NT$ 46,087,697</div>
+        <div class="text-xs text-slate-400 mt-1">基準歷史累計成本</div>
+      </div>
+
+      <!-- Card 3: 未實現損益 -->
+      <div class="bg-slate-850 border border-slate-800/80 p-4 rounded-2xl group hover:border-slate-700 transition">
+        <div class="text-xs text-slate-400 mb-1">未實現損益</div>
+        <div id="card-pnl" class="text-xl lg:text-2xl font-bold tracking-tight">-NT$ 1,510,602</div>
+        <div id="card-roi" class="text-xs font-semibold mt-1">
+          報酬率 -3.28%
+        </div>
+      </div>
+
+      <!-- Card 4: 閒置現金儲備 -->
+      <div class="bg-slate-850 border border-slate-800/80 p-4 rounded-2xl group hover:border-slate-700 transition">
+        <div class="flex items-center justify-between text-xs text-slate-400 mb-1">
+          <span>閒置現金儲備</span>
+          <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+        </div>
+        <div id="card-cash" class="text-xl lg:text-2xl font-bold text-emerald-400 tracking-tight">NT$ 87,543</div>
+        <div id="card-cash-sub" class="text-xs text-slate-400 mt-1">皓程 -84.5萬 + 菁 93.2萬 (淨 8.8萬)</div>
+      </div>
+
+      <!-- Card 5: 預估年股利 -->
+      <div class="bg-slate-850 border border-slate-800/80 p-4 rounded-2xl group hover:border-slate-700 transition">
+        <div class="text-xs text-slate-400 mb-1">預估年度股利</div>
+        <div id="card-dividend" class="text-xl lg:text-2xl font-bold text-amber-400 tracking-tight">NT$ 1,159,366</div>
+        <div id="card-div-yield" class="text-xs text-slate-400 mt-1">平均殖利率 2.61%</div>
+      </div>
+
+      <!-- Card 6: 平均每月被動收入 -->
+      <div class="bg-slate-850 border border-slate-800/80 p-4 rounded-2xl group hover:border-slate-700 transition">
+        <div class="text-xs text-slate-400 mb-1">月均被動現金流</div>
+        <div id="card-monthly-div" class="text-xl lg:text-2xl font-bold text-amber-300 tracking-tight">NT$ 96,614</div>
+        <div class="text-xs text-slate-400 mt-1">含債券月配與高股息</div>
+      </div>
+    </section>
+
+    <!-- Navigation Tabs Bar -->
+    <div class="flex border-b border-slate-800 gap-2 overflow-x-auto pb-0.5 no-scrollbar">
+      <button data-tab="tab-holdings" class="tab-btn active px-4 py-3 text-sm font-semibold border-b-2 border-blue-500 text-blue-400 flex items-center gap-2 whitespace-nowrap transition">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>
+        庫存明細與即時查詢
+      </button>
+      <button data-tab="tab-charts" class="tab-btn px-4 py-3 text-sm font-semibold border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center gap-2 whitespace-nowrap transition">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"/></svg>
+        歷史每日總值走勢
+      </button>
+      <button data-tab="tab-dividends" class="tab-btn px-4 py-3 text-sm font-semibold border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center gap-2 whitespace-nowrap transition">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        預估股利與被動收入
+      </button>
+      <button data-tab="tab-us" class="tab-btn px-4 py-3 text-sm font-semibold border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center gap-2 whitespace-nowrap transition">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        美股部位專區
+      </button>
+      <button data-tab="tab-tx" class="tab-btn px-4 py-3 text-sm font-semibold border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center gap-2 whitespace-nowrap transition">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/></svg>
+        歷史交易紀錄
+      </button>
+      <button data-tab="tab-simulator" class="tab-btn px-4 py-3 text-sm font-semibold border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center gap-2 whitespace-nowrap transition">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
+        即時試算機 (股價試算)
+      </button>
+    </div>
+
+    <!-- TAB 1: 庫存明細與即時查詢 (HOLDINGS) -->
+    <div id="tab-holdings" class="tab-content space-y-4">
+      <!-- Search, Filter & Sorter Toolbar -->
+      <div class="bg-slate-850 p-4 rounded-2xl border border-slate-800 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+        <!-- Search Input -->
+        <div class="relative flex-1">
+          <svg class="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          <input id="search-input" type="text" placeholder="輸入代號或名稱搜尋（如：2330、群聯、台達電、00937B...）" class="w-full bg-slate-900 border border-slate-700/80 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition">
+        </div>
+
+        <!-- Category Filter Tags -->
+        <div class="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0 no-scrollbar">
+          <button data-cat="all" class="cat-btn active text-xs font-semibold px-3 py-2 rounded-xl bg-blue-600 text-white transition">全部標的</button>
+          <button data-cat="core" class="cat-btn text-xs font-semibold px-3 py-2 rounded-xl bg-slate-800 text-slate-300 hover:bg-slate-750 transition">核心權值</button>
+          <button data-cat="etf" class="cat-btn text-xs font-semibold px-3 py-2 rounded-xl bg-slate-800 text-slate-300 hover:bg-slate-750 transition">股票型ETF</button>
+          <button data-cat="bond" class="cat-btn text-xs font-semibold px-3 py-2 rounded-xl bg-slate-800 text-slate-300 hover:bg-slate-750 transition">債券ETF</button>
+          <button data-cat="ic" class="cat-btn text-xs font-semibold px-3 py-2 rounded-xl bg-slate-800 text-slate-300 hover:bg-slate-750 transition">IC/記憶體</button>
+          <button data-cat="pcb" class="cat-btn text-xs font-semibold px-3 py-2 rounded-xl bg-slate-800 text-slate-300 hover:bg-slate-750 transition">PCB/載板</button>
+        </div>
+
+        <!-- Sort Select -->
+        <div class="flex items-center gap-2">
+          <span class="text-xs text-slate-400 whitespace-nowrap">排序:</span>
+          <select id="sort-select" class="bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-blue-500">
+            <option value="marketValue-desc">目前市值 (高到低)</option>
+            <option value="marketValue-asc">目前市值 (低到高)</option>
+            <option value="pnl-desc">損益金額 (多到少)</option>
+            <option value="pnl-asc">損益金額 (少到多)</option>
+            <option value="roi-desc">報酬率 (高到低)</option>
+            <option value="roi-asc">報酬率 (低到高)</option>
+            <option value="shares-desc">持有股數 (多到少)</option>
+            <option value="code-asc">股票代號</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Holdings Table (Responsive) -->
+      <div class="bg-slate-850 rounded-2xl border border-slate-800 overflow-hidden shadow-xl">
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse">
+            <thead>
+              <tr class="bg-slate-900/70 border-b border-slate-800 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                <th class="py-3 px-4">帳戶</th>
+                <th class="py-3 px-4">代號 / 標的名稱</th>
+                <th class="py-3 px-4 text-right">持有股數</th>
+                <th class="py-3 px-4 text-right">基準成本單價</th>
+                <th class="py-3 px-4 text-right">最新收盤價</th>
+                <th class="py-3 px-4 text-right">目前總市值</th>
+                <th class="py-3 px-4 text-right">未實現損益</th>
+                <th class="py-3 px-4 text-right">報酬率</th>
+                <th class="py-3 px-4 text-center">操作/詳情</th>
+              </tr>
+            </thead>
+            <tbody id="holdings-tbody" class="divide-y divide-slate-800/60 text-xs">
+              <!-- Rendered via JS -->
+            </tbody>
+          </table>
+        </div>
+        <div id="holdings-empty" class="hidden py-12 text-center text-slate-500 text-sm">
+          查無符合條件的股票標的
+        </div>
+        <div class="px-4 py-3 bg-slate-900/50 border-t border-slate-800 flex justify-between items-center text-xs text-slate-400">
+          <span>共 <strong id="holdings-count" class="text-white">0</strong> 檔標的</span>
+          <span>點擊任一標的列可查看完整詳情與配息試算</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 2: 歷史每日總值走勢 (CHARTS) -->
+    <div id="tab-charts" class="tab-content hidden space-y-6">
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Main Line Chart -->
+        <div class="bg-slate-850 p-5 rounded-2xl border border-slate-800 shadow-xl">
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <h3 class="text-sm font-bold text-white">全戶總市值 vs 總投入成本走勢</h3>
+              <p class="text-xs text-slate-400">2026/10/01 ~ 2026/10/16 歷史曲線</p>
+            </div>
+            <span class="text-xs px-2.5 py-1 rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/20">每日收盤結算</span>
+          </div>
+          <div class="relative h-72">
+            <canvas id="chart-history"></canvas>
+          </div>
+        </div>
+
+        <!-- Daily Change Bar Chart -->
+        <div class="bg-slate-850 p-5 rounded-2xl border border-slate-800 shadow-xl">
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <h3 class="text-sm font-bold text-white">單日資產變動金額柱狀圖</h3>
+              <p class="text-xs text-slate-400">每日結算相對前一日損益變動</p>
+            </div>
+            <span class="text-xs px-2.5 py-1 rounded-lg bg-slate-800 text-slate-300">單位: 新台幣 (TWD)</span>
+          </div>
+          <div class="relative h-72">
+            <canvas id="chart-daily-change"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- History Table -->
+      <div class="bg-slate-850 rounded-2xl border border-slate-800 overflow-hidden shadow-xl">
+        <div class="px-5 py-4 border-b border-slate-800 flex justify-between items-center bg-slate-900/50">
+          <h3 class="text-sm font-bold text-white">歷史每日總值詳細紀錄表</h3>
+          <span class="text-xs text-slate-400">共 14 個交易日結算紀錄</span>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse text-xs">
+            <thead>
+              <tr class="bg-slate-900/70 border-b border-slate-800 text-[11px] font-semibold text-slate-400 uppercase">
+                <th class="py-3 px-4">結算日期</th>
+                <th class="py-3 px-4 text-right">侯皓程 市值</th>
+                <th class="py-3 px-4 text-right">謝汝菁 市值</th>
+                <th class="py-3 px-4 text-right">全戶總市值</th>
+                <th class="py-3 px-4 text-right">總投入成本</th>
+                <th class="py-3 px-4 text-right">未實現損益</th>
+                <th class="py-3 px-4 text-right">累計報酬率</th>
+                <th class="py-3 px-4 text-right">單日變動金額</th>
+                <th class="py-3 px-4">重要市場事件與操作備註</th>
+              </tr>
+            </thead>
+            <tbody id="history-tbody" class="divide-y divide-slate-800/60">
+              <!-- Injected by JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 3: 預估股利與被動收入 (DIVIDENDS) -->
+    <div id="tab-dividends" class="tab-content hidden space-y-6">
+      <!-- Dividend KPI Summary -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="bg-gradient-to-br from-amber-500/10 to-transparent border border-amber-500/20 p-5 rounded-2xl">
+          <div class="text-xs font-medium text-amber-400">全戶預估年股利總額</div>
+          <div class="text-3xl font-bold text-white mt-1.5">NT$ 1,159,366</div>
+          <div class="text-xs text-slate-400 mt-1">侯皓程 NT$ 823,578 ＋ 謝汝菁 NT$ 335,788</div>
+        </div>
+        <div class="bg-gradient-to-br from-blue-500/10 to-transparent border border-blue-500/20 p-5 rounded-2xl">
+          <div class="text-xs font-medium text-blue-400">平均每月被動現金流</div>
+          <div class="text-3xl font-bold text-white mt-1.5">NT$ 96,614</div>
+          <div class="text-xs text-slate-400 mt-1">相當於每月自帶近 10 萬元被動收入入帳</div>
+        </div>
+        <div class="bg-gradient-to-br from-emerald-500/10 to-transparent border border-emerald-500/20 p-5 rounded-2xl">
+          <div class="text-xs font-medium text-emerald-400">全戶平均現金殖利率</div>
+          <div class="text-3xl font-bold text-white mt-1.5">2.61 %</div>
+          <div class="text-xs text-slate-400 mt-1">以目前總市值 NT$ 44,577,095 計算</div>
+        </div>
+      </div>
+
+      <!-- Dividend Table -->
+      <div class="bg-slate-850 rounded-2xl border border-slate-800 overflow-hidden shadow-xl">
+        <div class="px-5 py-4 border-b border-slate-800 flex justify-between items-center bg-slate-900/50">
+          <div>
+            <h3 class="text-sm font-bold text-white">各持股標的配息試算清單</h3>
+            <p class="text-xs text-slate-400">依據各公司最新公告與近年配息紀錄推估</p>
+          </div>
+          <span class="text-xs px-2.5 py-1 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20">固定收益與權值股息</span>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse text-xs">
+            <thead>
+              <tr class="bg-slate-900/70 border-b border-slate-800 text-[11px] font-semibold text-slate-400 uppercase">
+                <th class="py-3 px-4">帳戶</th>
+                <th class="py-3 px-4">股票代號 / 名稱</th>
+                <th class="py-3 px-4 text-right">持有股數</th>
+                <th class="py-3 px-4 text-right">目前股價</th>
+                <th class="py-3 px-4 text-center">配息頻率</th>
+                <th class="py-3 px-4 text-right">預估每股年股利</th>
+                <th class="py-3 px-4 text-right">預估年度股利(元)</th>
+                <th class="py-3 px-4 text-right">預估殖利率</th>
+                <th class="py-3 px-4 text-right">平均每月股利</th>
+                <th class="py-3 px-4">配息特性與說明</th>
+              </tr>
+            </thead>
+            <tbody id="dividends-tbody" class="divide-y divide-slate-800/60">
+              <!-- Injected by JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 4: 美股部位專區 (US STOCKS) -->
+    <div id="tab-us" class="tab-content hidden space-y-6">
+      <div class="bg-slate-850 p-5 rounded-2xl border border-slate-800 shadow-xl">
+        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-4">
+          <div>
+            <h3 class="text-sm font-bold text-white">侯皓程 美股投資組合 (美金計價)</h3>
+            <p class="text-xs text-slate-400">目前匯率採用 USD/TWD = 32.187 換算台幣</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="text-xs bg-blue-500/10 text-blue-400 px-3 py-1 rounded-lg border border-blue-500/20 font-mono">1 USD = 32.187 TWD</span>
+          </div>
+        </div>
+
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse text-xs">
+            <thead>
+              <tr class="bg-slate-900/70 border-b border-slate-800 text-[11px] font-semibold text-slate-400 uppercase">
+                <th class="py-3 px-4">市場 / 代號</th>
+                <th class="py-3 px-4">標的名稱</th>
+                <th class="py-3 px-4 text-right">持有股數</th>
+                <th class="py-3 px-4 text-right">最新市價 (USD)</th>
+                <th class="py-3 px-4 text-right">總市值 (USD)</th>
+                <th class="py-3 px-4 text-right">折合台幣 (TWD)</th>
+                <th class="py-3 px-4">資產主題 / 產業地位</th>
+              </tr>
+            </thead>
+            <tbody id="us-tbody" class="divide-y divide-slate-800/60">
+              <!-- Injected by JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 5: 歷史交易紀錄 (TRANSACTIONS) -->
+    <div id="tab-tx" class="tab-content hidden space-y-4">
+      <div class="bg-slate-850 p-4 rounded-2xl border border-slate-800 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+        <div>
+          <h3 class="text-sm font-bold text-white">歷史成交交易明細清單</h3>
+          <p class="text-xs text-slate-400">2026/09/21 至今全部買進、賣出與零股加碼紀錄</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <input id="tx-search" type="text" placeholder="搜尋交易標的或帳戶..." class="bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500">
+        </div>
+      </div>
+
+      <div class="bg-slate-850 rounded-2xl border border-slate-800 overflow-hidden shadow-xl">
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse text-xs">
+            <thead>
+              <tr class="bg-slate-900/70 border-b border-slate-800 text-[11px] font-semibold text-slate-400 uppercase">
+                <th class="py-3 px-4">交易日期</th>
+                <th class="py-3 px-4">帳戶</th>
+                <th class="py-3 px-4">代號 / 標的名稱</th>
+                <th class="py-3 px-4 text-center">類別</th>
+                <th class="py-3 px-4 text-right">成交股數</th>
+                <th class="py-3 px-4 text-right">成交單價</th>
+                <th class="py-3 px-4 text-right">淨收付金額 (TWD)</th>
+                <th class="py-3 px-4">下單管道 / 備註</th>
+              </tr>
+            </thead>
+            <tbody id="tx-tbody" class="divide-y divide-slate-800/60">
+              <!-- Injected by JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 6: 即時試算機 (SIMULATOR) -->
+    <div id="tab-simulator" class="tab-content hidden space-y-6">
+      <div class="bg-slate-850 p-6 rounded-2xl border border-slate-800 shadow-xl max-w-3xl mx-auto space-y-6">
+        <div>
+          <h3 class="text-base font-bold text-white flex items-center gap-2">
+            <svg class="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+            持股價位敏感度與即時損益模擬器
+          </h3>
+          <p class="text-xs text-slate-400 mt-1">模擬調整特定持股之現價，即時觀察對該帳戶與全戶資產總市值、未實現損益的連動影響。</p>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1.5">選擇欲模擬之持股標的</label>
+            <select id="sim-stock-select" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500">
+              <!-- Filled via JS -->
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1.5">模擬現價 (元)</label>
+            <input id="sim-price-input" type="number" step="0.5" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500">
+          </div>
+        </div>
+
+        <!-- Quick Scenario Presets -->
+        <div>
+          <span class="text-xs text-slate-400 block mb-2">快速情境試算預設：</span>
+          <div class="flex flex-wrap gap-2">
+            <button class="sim-preset-btn px-3 py-1.5 bg-slate-800 hover:bg-slate-750 text-xs text-slate-300 rounded-lg border border-slate-700" data-code="2330" data-price="2500">台積電重回 2,500 元</button>
+            <button class="sim-preset-btn px-3 py-1.5 bg-slate-800 hover:bg-slate-750 text-xs text-slate-300 rounded-lg border border-slate-700" data-code="2330" data-price="2600">台積電法說激勵衝 2,600 元</button>
+            <button class="sim-preset-btn px-3 py-1.5 bg-slate-800 hover:bg-slate-750 text-xs text-slate-300 rounded-lg border border-slate-700" data-code="8299" data-price="2000">群聯反彈站回 2,000 元</button>
+            <button class="sim-preset-btn px-3 py-1.5 bg-slate-800 hover:bg-slate-750 text-xs text-slate-300 rounded-lg border border-slate-700" data-code="2308" data-price="1800">台達電修復至 1,800 元</button>
+          </div>
+        </div>
+
+        <!-- Simulation Results Box -->
+        <div class="bg-slate-900 p-5 rounded-xl border border-slate-800 space-y-3">
+          <h4 class="text-xs font-semibold text-slate-400 uppercase tracking-wider">試算結果影響評估</h4>
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+            <div class="p-3 bg-slate-850 rounded-lg border border-slate-800">
+              <div class="text-[11px] text-slate-400">該標的原市值</div>
+              <div id="sim-res-orig-val" class="text-sm font-bold text-white mt-1">NT$ 0</div>
+            </div>
+            <div class="p-3 bg-slate-850 rounded-lg border border-slate-800">
+              <div class="text-[11px] text-slate-400">模擬後新市值</div>
+              <div id="sim-res-new-val" class="text-sm font-bold text-blue-400 mt-1">NT$ 0</div>
+            </div>
+            <div class="p-3 bg-slate-850 rounded-lg border border-slate-800">
+              <div class="text-[11px] text-slate-400">標的損益變動</div>
+              <div id="sim-res-diff" class="text-sm font-bold mt-1">+NT$ 0</div>
+            </div>
+            <div class="p-3 bg-slate-850 rounded-lg border border-slate-800">
+              <div class="text-[11px] text-slate-400">全戶總市值新預估</div>
+              <div id="sim-res-tot-val" class="text-sm font-bold text-white mt-1">NT$ 0</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Footer -->
+  <footer class="mt-auto border-t border-slate-800 py-4 px-6 text-center text-xs text-slate-500">
+    <p>股票庫存與每日總值紀錄表 Web App ・ 支援即時查詢、配息試算與情境模擬 ・ 資料基準：2026/10/21 收盤結算 (台股大漲595點期指結算最新收盤)</p>
+  </footer>
+
+  <!-- Application Logic -->
+  <script>
+    // State management
+    const RAW_DATA = {
+  "updateTime": "2026-10-21 14:00:00 (10/21 收盤結算更新)",
+  "accounts": {
+    "all": {
+      "name": "全戶合計",
+      "cash": 87543.0,
+      "cost": 46087696.9,
+      "value": 44577095.0,
+      "pnl": -1510601.9,
+      "roi": -3.28,
+      "dailyChange": 349575.0,
+      "annualDividend": 1159366,
+      "monthlyDividend": 96614,
+      "dividendYield": 2.6
+    },
+    "hou": {
+      "name": "侯皓程",
+      "cash": -844548.0,
+      "twCost": 22387892.1,
+      "twValue": 22903120.0,
+      "usValue": 7775093.0,
+      "cost": 31119440.9,
+      "value": 30678213.0,
+      "pnl": -441227.9,
+      "roi": -1.42,
+      "dailyChange": 108215.0,
+      "annualDividend": 823578,
+      "monthlyDividend": 68632,
+      "dividendYield": 2.68
+    },
+    "xie": {
+      "name": "謝汝菁",
+      "cash": 932091.0,
+      "cost": 14968256.0,
+      "value": 13898882.0,
+      "pnl": -1069374.0,
+      "roi": -7.14,
+      "dailyChange": 241360.0,
+      "annualDividend": 335788,
+      "monthlyDividend": 27982,
+      "dividendYield": 2.42
+    }
+  },
+  "holdings": [
+    {
+      "id": 1,
+      "account": "hou",
+      "accountName": "侯皓程",
+      "code": "0050",
+      "name": "元大台灣50",
+      "category": "etf",
+      "categoryName": "市值型ETF",
+      "shares": 5000,
+      "costPrice": 112.33,
+      "totalCost": 561640.0,
+      "currentPrice": 108.7,
+      "marketValue": 543500.0,
+      "pnl": -18140.0,
+      "roi": -3.23,
+      "divPerShare": 3.8,
+      "divFreq": "半年配",
+      "divAnnual": 19000,
+      "note": "10/21隨大盤強彈大漲0.85元收108.70元"
+    },
+    {
+      "id": 2,
+      "account": "hou",
+      "accountName": "侯皓程",
+      "code": "00937B",
+      "name": "群益ESG投等債20+",
+      "category": "bond",
+      "categoryName": "債券ETF",
+      "shares": 250000,
+      "costPrice": 13.71,
+      "totalCost": 3427617.5,
+      "currentPrice": 13.82,
+      "marketValue": 3455000.0,
+      "pnl": 27382.5,
+      "roi": 0.8,
+      "divPerShare": 1.008,
+      "divFreq": "月配",
+      "divAnnual": 252000.0,
+      "note": "10/21持平收13.82元(持股250張)"
+    },
+    {
+      "id": 3,
+      "account": "hou",
+      "accountName": "侯皓程",
+      "code": "00953B",
+      "name": "群益優選非投等債(筆1)",
+      "category": "bond",
+      "categoryName": "債券ETF",
+      "shares": 350000,
+      "costPrice": 9.5,
+      "totalCost": 3323764.5,
+      "currentPrice": 9.6,
+      "marketValue": 3360000.0,
+      "pnl": 36235.5,
+      "roi": 1.09,
+      "divPerShare": 0.804,
+      "divFreq": "月配",
+      "divAnnual": 281400,
+      "note": "10/21持平收9.60元"
+    },
+    {
+      "id": 4,
+      "account": "hou",
+      "accountName": "侯皓程",
+      "code": "00981A",
+      "name": "主動統一台股增長",
+      "category": "etf",
+      "categoryName": "主動式ETF",
+      "shares": 10000,
+      "costPrice": 30.77,
+      "totalCost": 307660.0,
+      "currentPrice": 29.5,
+      "marketValue": 295000.0,
+      "pnl": -12660.0,
+      "roi": -4.11,
+      "divPerShare": 1.24,
+      "divFreq": "月配/年配",
+      "divAnnual": 12400,
+      "note": "10/21反彈大漲0.40元收29.50元"
+    },
+    {
+      "id": 5,
+      "account": "hou",
+      "accountName": "侯皓程",
+      "code": "2330",
+      "name": "台積電",
+      "category": "core",
+      "categoryName": "半導體核心",
+      "shares": 4101,
+      "costPrice": 2489.42,
+      "totalCost": 10209125.9,
+      "currentPrice": 2420.0,
+      "marketValue": 9924420.0,
+      "pnl": -284705.9000000004,
+      "roi": -2.79,
+      "divPerShare": 28.0,
+      "divFreq": "季配",
+      "divAnnual": 114828,
+      "note": "10/21上漲15元收復2420元"
+    },
+    {
+      "id": 6,
+      "account": "hou",
+      "accountName": "侯皓程",
+      "code": "00830",
+      "name": "國泰費城半導體",
+      "category": "etf",
+      "categoryName": "海外半導體",
+      "shares": 15000,
+      "costPrice": 88.86,
+      "totalCost": 1332843.0,
+      "currentPrice": 82.8,
+      "marketValue": 1242000.0,
+      "pnl": -90843.0,
+      "roi": -6.82,
+      "divPerShare": 9.0,
+      "divFreq": "年配",
+      "divAnnual": 135000,
+      "note": "10/21費半強彈大漲1.45元收82.80元"
+    },
+    {
+      "id": 7,
+      "account": "hou",
+      "accountName": "侯皓程",
+      "code": "00953B",
+      "name": "群益優選非投等債(筆2)",
+      "category": "bond",
+      "categoryName": "債券ETF",
+      "shares": 100000,
+      "costPrice": 9.57,
+      "totalCost": 957362.0,
+      "currentPrice": 9.6,
+      "marketValue": 960000.0,
+      "pnl": 2638.0,
+      "roi": 0.28,
+      "divPerShare": 0.804,
+      "divFreq": "月配",
+      "divAnnual": 80400,
+      "note": "10/21持平收9.60元"
+    },
+    {
+      "id": 8,
+      "account": "hou",
+      "accountName": "侯皓程",
+      "code": "2454",
+      "name": "聯發科",
+      "category": "ic",
+      "categoryName": "IC設計龍頭",
+      "shares": 400,
+      "costPrice": 4322.4,
+      "totalCost": 1728959.0,
+      "currentPrice": 4140.0,
+      "marketValue": 1656000.0,
+      "pnl": -72959.0,
+      "roi": -4.22,
+      "divPerShare": 53.5,
+      "divFreq": "半年配",
+      "divAnnual": 21400.0,
+      "note": "10/21震盪微跌10元收4140元(持有400股)"
+    },
+    {
+      "id": 9,
+      "account": "hou",
+      "accountName": "侯皓程",
+      "code": "2540",
+      "name": "愛山林",
+      "category": "re",
+      "categoryName": "營建代銷",
+      "shares": 10000,
+      "costPrice": 48.71,
+      "totalCost": 487142.0,
+      "currentPrice": 49.4,
+      "marketValue": 494000.0,
+      "pnl": 6858.0,
+      "roi": 1.41,
+      "divPerShare": 6.0,
+      "divFreq": "年配",
+      "divAnnual": 60000,
+      "note": "10/21收盤回升至49.40元(+0.40)"
+    },
+    {
+      "id": 10,
+      "account": "hou",
+      "accountName": "侯皓程",
+      "code": "6215",
+      "name": "和椿",
+      "category": "auto",
+      "categoryName": "AI自動化機器人",
+      "shares": 1000,
+      "costPrice": 97.94,
+      "totalCost": 97939.0,
+      "currentPrice": 90.2,
+      "marketValue": 90200.0,
+      "pnl": -7739.0,
+      "roi": -7.9,
+      "divPerShare": 1.0,
+      "divFreq": "年配",
+      "divAnnual": 1000,
+      "note": "10/21強彈1.70元收90.20元"
+    },
+    {
+      "id": 11,
+      "account": "hou",
+      "accountName": "侯皓程",
+      "code": "6488",
+      "name": "環球晶",
+      "category": "ic",
+      "categoryName": "矽晶圓龍頭",
+      "shares": 1000,
+      "costPrice": 910.3,
+      "totalCost": 910295.0,
+      "currentPrice": 883.0,
+      "marketValue": 883000.0,
+      "pnl": -27295.0,
+      "roi": -3.0,
+      "divPerShare": 7.7,
+      "divFreq": "半年配",
+      "divAnnual": 7700,
+      "note": "10/21續揚大漲15元收883.00元(+1.73%)"
+    },
+    {
+      "id": 12,
+      "account": "xie",
+      "accountName": "謝汝菁",
+      "code": "006208",
+      "name": "富邦台50",
+      "category": "etf",
+      "categoryName": "市值型ETF",
+      "shares": 13000,
+      "costPrice": 258.23,
+      "totalCost": 3357028.0,
+      "currentPrice": 251.2,
+      "marketValue": 3265600.0,
+      "pnl": -91428.0,
+      "roi": -2.72,
+      "divPerShare": 8.6,
+      "divFreq": "半年配",
+      "divAnnual": 111800,
+      "note": "10/21大漲3.10元收251.20元"
+    },
+    {
+      "id": 13,
+      "account": "xie",
+      "accountName": "謝汝菁",
+      "code": "00981A",
+      "name": "主動統一台股增長",
+      "category": "etf",
+      "categoryName": "主動式ETF",
+      "shares": 15000,
+      "costPrice": 30.77,
+      "totalCost": 461550.0,
+      "currentPrice": 29.5,
+      "marketValue": 442500.0,
+      "pnl": -19050.0,
+      "roi": -4.13,
+      "divPerShare": 1.24,
+      "divFreq": "月配/年配",
+      "divAnnual": 18600,
+      "note": "10/21反彈大漲0.40元收29.50元"
+    },
+    {
+      "id": 14,
+      "account": "xie",
+      "accountName": "謝汝菁",
+      "code": "2308",
+      "name": "台達電",
+      "category": "core",
+      "categoryName": "電源與散熱綠能",
+      "shares": 1000,
+      "costPrice": 1850.3,
+      "totalCost": 1850302.0,
+      "currentPrice": 1625.0,
+      "marketValue": 1625000.0,
+      "pnl": -225302.0,
+      "roi": -12.18,
+      "divPerShare": 12.0,
+      "divFreq": "年配",
+      "divAnnual": 12000,
+      "note": "10/21收盤1625.00元"
+    },
+    {
+      "id": 15,
+      "account": "xie",
+      "accountName": "謝汝菁",
+      "code": "2330",
+      "name": "台積電",
+      "category": "core",
+      "categoryName": "半導體核心",
+      "shares": 1100,
+      "costPrice": 2499.27,
+      "totalCost": 2749192.0,
+      "currentPrice": 2420.0,
+      "marketValue": 2662000.0,
+      "pnl": -87192.0,
+      "roi": -3.17,
+      "divPerShare": 28.0,
+      "divFreq": "季配",
+      "divAnnual": 30800.0,
+      "note": "10/21上漲15元收復2420元"
+    },
+    {
+      "id": 16,
+      "account": "xie",
+      "accountName": "謝汝菁",
+      "code": "2884",
+      "name": "玉山金",
+      "category": "fin",
+      "categoryName": "優質金融股",
+      "shares": 120,
+      "costPrice": 45.1,
+      "totalCost": 5412.0,
+      "currentPrice": 49.85,
+      "marketValue": 5982.0,
+      "pnl": 570.0,
+      "roi": 10.53,
+      "divPerShare": 1.4,
+      "divFreq": "年配",
+      "divAnnual": 168,
+      "note": "10/21上漲0.50元創高收49.85元(+1.01%)"
+    },
+    {
+      "id": 17,
+      "account": "xie",
+      "accountName": "謝汝菁",
+      "code": "3037",
+      "name": "欣興",
+      "category": "pcb",
+      "categoryName": "ABF載板龍頭",
+      "shares": 100,
+      "costPrice": 1204.65,
+      "totalCost": 120465.0,
+      "currentPrice": 1100.0,
+      "marketValue": 110000.0,
+      "pnl": -10465.0,
+      "roi": -8.69,
+      "divPerShare": 3.0,
+      "divFreq": "年配",
+      "divAnnual": 300,
+      "note": "10/21大漲15元收復1100.00元"
+    },
+    {
+      "id": 18,
+      "account": "xie",
+      "accountName": "謝汝菁",
+      "code": "4958",
+      "name": "臻鼎-KY",
+      "category": "pcb",
+      "categoryName": "全球PCB龍頭",
+      "shares": 100,
+      "costPrice": 510.0,
+      "totalCost": 51000.0,
+      "currentPrice": 578.0,
+      "marketValue": 57800.0,
+      "pnl": 6800.0,
+      "roi": 13.33,
+      "divPerShare": 3.5,
+      "divFreq": "年配",
+      "divAnnual": 350,
+      "note": "10/21強勢飆漲20元收578.00元(+3.58%)"
+    },
+    {
+      "id": 19,
+      "account": "xie",
+      "accountName": "謝汝菁",
+      "code": "8299",
+      "name": "群聯",
+      "category": "ic",
+      "categoryName": "NAND控制晶片",
+      "shares": 3000,
+      "costPrice": 2124.44,
+      "totalCost": 6373307.0,
+      "currentPrice": 1910.0,
+      "marketValue": 5730000.0,
+      "pnl": -643307.0,
+      "roi": -10.09,
+      "divPerShare": 60.0,
+      "divFreq": "半年配",
+      "divAnnual": 180000.0,
+      "note": "10/21記憶體大噴發，大漲60元收1910.00元(+3.24%)"
+    }
+  ],
+  "usHoldings": [
+    {
+      "account": "侯皓程",
+      "code": "MU",
+      "name": "美光科技 Micron",
+      "market": "NASDAQ",
+      "shares": 22,
+      "priceUsd": 122.5,
+      "valueUsd": 2695.0,
+      "rate": 32.187,
+      "valueTwd": 86744,
+      "note": "AI高頻寬記憶體(HBM3E)"
+    },
+    {
+      "account": "侯皓程",
+      "code": "DRAM",
+      "name": "Roundhill Memory ETF",
+      "market": "BATS",
+      "shares": 1000,
+      "priceUsd": 31.2,
+      "valueUsd": 31200.0,
+      "rate": 32.187,
+      "valueTwd": 1004234,
+      "note": "全球記憶體週期ETF"
+    },
+    {
+      "account": "侯皓程",
+      "code": "BRK.B",
+      "name": "波克夏海瑟威B",
+      "market": "NYSE",
+      "shares": 132,
+      "priceUsd": 495.0,
+      "valueUsd": 65340.0,
+      "rate": 32.187,
+      "valueTwd": 2103109,
+      "note": "巴菲特價值投資旗艦"
+    },
+    {
+      "account": "侯皓程",
+      "code": "TSLA",
+      "name": "特斯拉 Tesla",
+      "market": "NASDAQ",
+      "shares": 224,
+      "priceUsd": 255.0,
+      "valueUsd": 57120.0,
+      "rate": 32.187,
+      "valueTwd": 1838551,
+      "note": "自駕與機器人核心"
+    },
+    {
+      "account": "侯皓程",
+      "code": "QQQ",
+      "name": "Invesco 納斯達克100",
+      "market": "NASDAQ",
+      "shares": 8,
+      "priceUsd": 510.0,
+      "valueUsd": 4080.0,
+      "rate": 32.187,
+      "valueTwd": 131323,
+      "note": "美股科技權值指數ETF"
+    }
+  ],
+  "history": [
+    {
+      "date": "2026/10/01",
+      "hou": 29746650.04,
+      "xie": 15162442.0,
+      "total": 44909092.04,
+      "cost": 44792054.94,
+      "pnl": 117037.1,
+      "roi": 0.26,
+      "change": 0.0,
+      "note": "初始基準記錄"
+    },
+    {
+      "date": "2026/10/02",
+      "hou": 29960238.0,
+      "xie": 15508242.0,
+      "total": 45468480.0,
+      "cost": 45268652.9,
+      "pnl": 199827.1,
+      "roi": 0.44,
+      "change": 559388.0,
+      "note": "買進2330 100股, 00830 1000股, 2540 3000股"
+    },
+    {
+      "date": "2026/10/05",
+      "hou": 30606211.83,
+      "xie": 16358018.0,
+      "total": 46964229.83,
+      "cost": 46067898.73,
+      "pnl": 896331.1,
+      "roi": 1.95,
+      "change": 1495750.0,
+      "note": "買進2330 200股, 006208 1000股, 00830 2000股，出清2337旺宏"
+    },
+    {
+      "date": "2026/10/06",
+      "hou": 30688102.99,
+      "xie": 16406724.0,
+      "total": 47094826.99,
+      "cost": 46130219.89,
+      "pnl": 964607.1,
+      "roi": 2.09,
+      "change": 130597.0,
+      "note": "台股續創歷史高，台達電站上2050元"
+    },
+    {
+      "date": "2026/10/07",
+      "hou": 30612514.29,
+      "xie": 16256754.0,
+      "total": 46869268.29,
+      "cost": 46087831.19,
+      "pnl": 781437.1,
+      "roi": 1.7,
+      "change": -225559.0,
+      "note": "大盤5萬點前狹幅震盪整理"
+    },
+    {
+      "date": "2026/10/08",
+      "hou": 28725166.0,
+      "xie": 16072940.0,
+      "total": 44798106.0,
+      "cost": 44467759.4,
+      "pnl": 330346.6,
+      "roi": 0.74,
+      "change": -2071162.0,
+      "note": "出清台達電400股、欣興750股，回收現金173.1萬"
+    },
+    {
+      "date": "2026/10/12",
+      "hou": 29488125.5,
+      "xie": 14827072.0,
+      "total": 44315197.5,
+      "cost": 44219209.9,
+      "pnl": 95987.6,
+      "roi": 0.22,
+      "change": -482908.5,
+      "note": "買進愛山林2張、費半1張、聯發科100股；出清環球晶1張獲利3萬"
+    },
+    {
+      "date": "2026/10/13",
+      "hou": 29421165.0,
+      "xie": 14269354.0,
+      "total": 43690519.0,
+      "cost": 44266083.4,
+      "pnl": -575564.4,
+      "roi": -1.3,
+      "change": -624678.5,
+      "note": "買進台積電99股(2505元)；台股大跌960點"
+    },
+    {
+      "date": "2026/10/14",
+      "hou": 29660625.0,
+      "xie": 14766030.0,
+      "total": 44426655.0,
+      "cost": 44645622.4,
+      "pnl": -218967.4,
+      "roi": -0.49,
+      "change": 736136.0,
+      "note": "謝汝菁加碼群聯100股、台達電100股；台股反彈284點"
+    },
+    {
+      "date": "2026/10/15",
+      "hou": 30020433.0,
+      "xie": 13104206.0,
+      "total": 43124639.0,
+      "cost": 44645896.4,
+      "pnl": -1521257.4,
+      "roi": -3.41,
+      "change": -1302016.0,
+      "note": "台股狂瀉1655點；侯皓程加碼聯發科200股；謝汝菁減碼欣興900股、買進台達電100股"
+    },
+    {
+      "date": "2026/10/16",
+      "hou": 31014113.0,
+      "xie": 13302148.0,
+      "total": 44316261.0,
+      "cost": 45738249.4,
+      "pnl": -1421988.4,
+      "roi": -3.11,
+      "change": 1191622.0,
+      "note": "台股反彈141點收47111點；校準玉山對帳單買進愛山林2張(滿10張)、費半1張(滿15張)與買進環球晶1張；全戶總市值達4431.6萬"
+    },
+    {
+      "date": "2026/10/19",
+      "hou": 30641213.0,
+      "xie": 13819966.0,
+      "total": 44461179.0,
+      "cost": 46087696.9,
+      "pnl": -1626517.9,
+      "roi": -3.53,
+      "change": 838418.0,
+      "note": "台股跌289點收46822；侯皓程加碼聯發科100股；謝汝菁加碼群聯200股(滿3張)、台積電100股(累計1100股)"
+    },
+    {
+      "date": "2026/10/20",
+      "hou": 30569998.0,
+      "xie": 13657522.0,
+      "total": 44227520.0,
+      "cost": 46087696.9,
+      "pnl": -1860176.9,
+      "roi": -4.04,
+      "change": -233659.0,
+      "note": "台股大跌529點收46293點；台積電跌15元收2405元；聯發科跌55元收4150元；全戶總市值4422.8萬"
+    },
+    {
+      "date": "2026/10/21",
+      "hou": 30678213.0,
+      "xie": 13898882.0,
+      "total": 44577095.0,
+      "cost": 46087696.9,
+      "pnl": -1510601.9,
+      "roi": -3.28,
+      "change": 349575.0,
+      "note": "期指結算台股大漲595點收46888點；台積電漲15元收2420元；群聯大漲收1910元；全戶總市值回升至4457.7萬"
+    }
+  ],
+  "transactions": [
+    {
+      "date": "2026/10/19",
+      "account": "侯皓程",
+      "code": "2454",
+      "name": "聯發科",
+      "type": "現股買進",
+      "shares": 100,
+      "price": 4240.0,
+      "net": -424604,
+      "note": "玉山證券8847-0558649對帳單(加碼至400股)"
+    },
+    {
+      "date": "2026/10/19",
+      "account": "謝*菁",
+      "code": "8299",
+      "name": "群聯",
+      "type": "現股買進",
+      "shares": 200,
+      "price": 1845.0,
+      "net": -369525,
+      "note": "玉山證券8847-5891547對帳單(湊滿3張)"
+    },
+    {
+      "date": "2026/10/19",
+      "account": "謝*菁",
+      "code": "2330",
+      "name": "台積電",
+      "type": "現股買進",
+      "shares": 100,
+      "price": 2405.0,
+      "net": -240842,
+      "note": "玉山證券8847-5891547對帳單(加碼至1100股)"
+    },
+    {
+      "date": "2026/10/16",
+      "account": "侯皓程",
+      "code": "6488",
+      "name": "環球晶",
+      "type": "現股買進",
+      "shares": 1000,
+      "price": 909.0,
+      "net": -910295,
+      "note": "今日買進1張；手續費1295元"
+    },
+    {
+      "date": "2026/10/16",
+      "account": "侯皓程",
+      "code": "00830",
+      "name": "國泰費城半導體",
+      "type": "現股買進",
+      "shares": 1000,
+      "price": 84.0,
+      "net": -84119,
+      "note": "玉山證券對帳單(加碼湊滿15張)"
+    },
+    {
+      "date": "2026/10/16",
+      "account": "侯皓程",
+      "code": "2540",
+      "name": "愛山林",
+      "type": "現股買進",
+      "shares": 2000,
+      "price": 48.9,
+      "net": -97939,
+      "note": "玉山證券對帳單(加碼湊滿10張)"
+    },
+    {
+      "date": "2026/10/15",
+      "account": "侯皓程",
+      "code": "2454",
+      "name": "聯發科",
+      "type": "現股買進",
+      "shares": 100,
+      "price": 4255.0,
+      "net": -426106,
+      "note": "玉山證券對帳單(加碼湊滿300股)"
+    },
+    {
+      "date": "2026/10/15",
+      "account": "侯皓程",
+      "code": "2454",
+      "name": "聯發科",
+      "type": "現股買進",
+      "shares": 100,
+      "price": 4200.0,
+      "net": -420598,
+      "note": "玉山證券對帳單(零股買進)"
+    },
+    {
+      "date": "2026/10/15",
+      "account": "謝*菁",
+      "code": "2308",
+      "name": "台達電",
+      "type": "現股買進",
+      "shares": 100,
+      "price": 1640.0,
+      "net": -164233,
+      "note": "玉山證券對帳單(湊滿1張)"
+    },
+    {
+      "date": "2026/10/15",
+      "account": "謝*菁",
+      "code": "3037",
+      "name": "欣興",
+      "type": "現股賣出",
+      "shares": 500,
+      "price": 1075.0,
+      "net": 535123,
+      "note": "玉山證券對帳單賣出"
+    },
+    {
+      "date": "2026/10/15",
+      "account": "謝*菁",
+      "code": "3037",
+      "name": "欣興",
+      "type": "現股賣出",
+      "shares": 400,
+      "price": 1070.0,
+      "net": 426107,
+      "note": "玉山證券對帳單賣出"
+    },
+    {
+      "date": "2026/10/14",
+      "account": "謝*菁",
+      "code": "2308",
+      "name": "台達電",
+      "type": "現股買進",
+      "shares": 100,
+      "price": 1805.0,
+      "net": -180757,
+      "note": "玉山證券盤中零買"
+    },
+    {
+      "date": "2026/10/14",
+      "account": "謝*菁",
+      "code": "8299",
+      "name": "群聯",
+      "type": "現股買進",
+      "shares": 100,
+      "price": 1985.0,
+      "net": -198782,
+      "note": "玉山證券盤中零買"
+    },
+    {
+      "date": "2026/10/13",
+      "account": "侯皓程",
+      "code": "2330",
+      "name": "台積電",
+      "type": "現股買進",
+      "shares": 99,
+      "price": 2505.0,
+      "net": -248348,
+      "note": "永豐金證券(零股)"
+    },
+    {
+      "date": "2026/10/12",
+      "account": "侯皓程",
+      "code": "00830",
+      "name": "國泰費城半導體",
+      "type": "現股買進",
+      "shares": 1000,
+      "price": 89.95,
+      "net": -90078,
+      "note": "玉山證券對帳單校準"
+    },
+    {
+      "date": "2026/10/12",
+      "account": "侯皓程",
+      "code": "2454",
+      "name": "聯發科",
+      "type": "現股買進",
+      "shares": 100,
+      "price": 4570.0,
+      "net": -457651,
+      "note": "玉山證券對帳單"
+    },
+    {
+      "date": "2026/10/12",
+      "account": "侯皓程",
+      "code": "2540",
+      "name": "愛山林",
+      "type": "現股買進",
+      "shares": 1000,
+      "price": 49.9,
+      "net": -49971,
+      "note": "玉山證券對帳單校準"
+    },
+    {
+      "date": "2026/10/12",
+      "account": "侯皓程",
+      "code": "2540",
+      "name": "愛山林",
+      "type": "現股買進",
+      "shares": 1000,
+      "price": 49.85,
+      "net": -49921,
+      "note": "玉山證券對帳單校準"
+    },
+    {
+      "date": "2026/10/12",
+      "account": "謝*菁",
+      "code": "6488",
+      "name": "環球晶",
+      "type": "現股賣出",
+      "shares": 1000,
+      "price": 1130.0,
+      "net": 1125000,
+      "note": "獲利了結出清"
+    },
+    {
+      "date": "2026/10/08",
+      "account": "侯皓程",
+      "code": "3037",
+      "name": "欣興",
+      "type": "現股賣出",
+      "shares": 750,
+      "price": 1265.0,
+      "net": 944553,
+      "note": "出清賣出收回現金"
+    },
+    {
+      "date": "2026/10/08",
+      "account": "侯皓程",
+      "code": "2308",
+      "name": "台達電",
+      "type": "現股賣出",
+      "shares": 400,
+      "price": 1975.0,
+      "net": 786505,
+      "note": "出清賣出收回現金"
+    },
+    {
+      "date": "2026/10/05",
+      "account": "侯皓程",
+      "code": "00937B",
+      "name": "群益ESG投等債20+",
+      "type": "現股賣出",
+      "shares": 50000,
+      "price": 13.7,
+      "net": 684024,
+      "note": "永豐金證券對帳單賣出50張；手續費976元，債券ETF免徵證交稅"
+    },
+    {
+      "date": "2026/10/05",
+      "account": "侯皓程",
+      "code": "00830",
+      "name": "國泰費城半導體",
+      "type": "現股買進",
+      "shares": 2000,
+      "price": 93.15,
+      "net": -186565,
+      "note": "玉山證券加碼"
+    },
+    {
+      "date": "2026/10/05",
+      "account": "謝*菁",
+      "code": "2337",
+      "name": "旺宏",
+      "type": "現股賣出",
+      "shares": 2000,
+      "price": 121.0,
+      "net": 240930,
+      "note": "出清賣出"
+    },
+    {
+      "date": "2026/10/05",
+      "account": "謝*菁",
+      "code": "006208",
+      "name": "富邦台50",
+      "type": "現股買進",
+      "shares": 1000,
+      "price": 265.45,
+      "net": -265828,
+      "note": "定期定額加碼"
+    },
+    {
+      "date": "2026/10/05",
+      "account": "謝*菁",
+      "code": "2330",
+      "name": "台積電",
+      "type": "現股買進",
+      "shares": 200,
+      "price": 2575.0,
+      "net": -515733,
+      "note": "盤中加碼"
+    },
+    {
+      "date": "2026/10/02",
+      "account": "侯皓程",
+      "code": "2540",
+      "name": "愛山林",
+      "type": "現股買進",
+      "shares": 3000,
+      "price": 48.2,
+      "net": -144806,
+      "note": "玉山證券"
+    },
+    {
+      "date": "2026/10/02",
+      "account": "謝*菁",
+      "code": "2330",
+      "name": "台積電",
+      "type": "現股買進",
+      "shares": 100,
+      "price": 2500.0,
+      "net": -250356,
+      "note": "盤中加碼"
+    }
+  ]
+};
+    let currentAccount = 'all'; // 'all' | 'hou' | 'xie'
+    let currentCategory = 'all';
+    let searchQuery = '';
+    let sortKey = 'marketValue-desc';
+    let isTaiwanColor = true; // true: Red=Up/Profit, Green=Down/Loss (台股) ; false: Green=Up, Red=Down (國際)
+    let historyChartInstance = null;
+    let dailyChangeChartInstance = null;
+
+    // Formatters
+    function formatCurrency(val, prefix = 'NT$ ') {
+      if (val === null || val === undefined) return '-';
+      const num = Number(val);
+      const sign = num < 0 ? '-' : '';
+      return sign + prefix + Math.abs(num).toLocaleString('zh-TW', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+    }
+
+    function formatNumber(val, decimals = 2) {
+      if (val === null || val === undefined) return '-';
+      return Number(val).toLocaleString('zh-TW', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+    }
+
+    function getPnlColorClass(val) {
+      const num = Number(val);
+      if (num === 0) return 'text-slate-400';
+      if (isTaiwanColor) {
+        return num > 0 ? 'text-rose-400' : 'text-emerald-400';
+      } else {
+        return num > 0 ? 'text-emerald-400' : 'text-rose-400';
+      }
+    }
+
+    function getPnlBgClass(val) {
+      const num = Number(val);
+      if (num === 0) return 'bg-slate-800 text-slate-400 border-slate-700';
+      if (isTaiwanColor) {
+        return num > 0 ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20';
+      } else {
+        return num > 0 ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-rose-500/10 text-rose-400 border-rose-500/20';
+      }
+    }
+
+    // Show Toast
+    function showToast(msg) {
+      const toast = document.getElementById('toast');
+      const toastMsg = document.getElementById('toast-msg');
+      toastMsg.textContent = msg;
+      toast.classList.remove('translate-y-[-100px]', 'opacity-0', 'pointer-events-none');
+      setTimeout(() => {
+        toast.classList.add('translate-y-[-100px]', 'opacity-0', 'pointer-events-none');
+      }, 3000);
+    }
+
+    // Render Metric Cards
+    function renderOverviewCards() {
+      const acc = RAW_DATA.accounts[currentAccount];
+      document.getElementById('card-market-value').textContent = formatCurrency(acc.value);
+      document.getElementById('card-total-cost').textContent = formatCurrency(acc.cost);
+
+      const pnlEl = document.getElementById('card-pnl');
+      pnlEl.textContent = (acc.pnl >= 0 ? '+' : '') + formatCurrency(acc.pnl);
+      pnlEl.className = 'text-xl lg:text-2xl font-bold tracking-tight ' + getPnlColorClass(acc.pnl);
+
+      const roiEl = document.getElementById('card-roi');
+      roiEl.textContent = `報酬率 ${acc.roi >= 0 ? '+' : ''}${formatNumber(acc.roi, 2)}%`;
+      roiEl.className = 'text-xs font-semibold mt-1 ' + getPnlColorClass(acc.pnl);
+
+      const dailyChangeEl = document.getElementById('card-daily-change');
+      const dailySign = acc.dailyChange >= 0 ? '+' : '';
+      dailyChangeEl.innerHTML = `<span class="px-1.5 py-0.5 rounded text-[11px] border ${getPnlBgClass(acc.dailyChange)}">今日變動 ${dailySign}${formatCurrency(acc.dailyChange)}</span>`;
+
+      document.getElementById('card-cash').textContent = formatCurrency(acc.cash);
+      if (currentAccount === 'hou') {
+        document.getElementById('card-cash-sub').textContent = '侯皓程證券帳戶可用餘額';
+      } else if (currentAccount === 'xie') {
+        document.getElementById('card-cash-sub').textContent = '謝汝菁證券帳戶可用餘額';
+      } else {
+        document.getElementById('card-cash-sub').textContent = '皓程 -84.5萬 + 菁 93.2萬 (淨 8.8萬)';
+      }
+
+      document.getElementById('card-dividend').textContent = formatCurrency(acc.annualDividend);
+      document.getElementById('card-div-yield').textContent = `平均殖利率 ${formatNumber(acc.dividendYield, 2)}%`;
+      document.getElementById('card-monthly-div').textContent = formatCurrency(acc.monthlyDividend);
+    }
+
+    // Filter & Sort Holdings
+    function getFilteredHoldings() {
+      return RAW_DATA.holdings.filter(item => {
+        // Account filter
+        if (currentAccount !== 'all' && item.account !== currentAccount) return false;
+        // Category filter
+        if (currentCategory !== 'all' && item.category !== currentCategory) return false;
+        // Search filter
+        if (searchQuery.trim() !== '') {
+          const q = searchQuery.trim().toLowerCase();
+          const matchCode = item.code.toLowerCase().includes(q);
+          const matchName = item.name.toLowerCase().includes(q);
+          const matchAcc = item.accountName.toLowerCase().includes(q);
+          if (!matchCode && !matchName && !matchAcc) return false;
+        }
+        return true;
+      }).sort((a, b) => {
+        switch (sortKey) {
+          case 'marketValue-desc': return b.marketValue - a.marketValue;
+          case 'marketValue-asc': return a.marketValue - b.marketValue;
+          case 'pnl-desc': return b.pnl - a.pnl;
+          case 'pnl-asc': return a.pnl - b.pnl;
+          case 'roi-desc': return b.roi - a.roi;
+          case 'roi-asc': return a.roi - b.roi;
+          case 'shares-desc': return b.shares - a.shares;
+          case 'code-asc': return a.code.localeCompare(b.code);
+          default: return b.marketValue - a.marketValue;
+        }
+      });
+    }
+
+    // Render Holdings Table
+    function renderHoldingsTable() {
+      const tbody = document.getElementById('holdings-tbody');
+      const emptyEl = document.getElementById('holdings-empty');
+      const items = getFilteredHoldings();
+      document.getElementById('holdings-count').textContent = items.length;
+
+      if (items.length === 0) {
+        tbody.innerHTML = '';
+        emptyEl.classList.remove('hidden');
+        return;
+      }
+      emptyEl.classList.add('hidden');
+
+      tbody.innerHTML = items.map(item => {
+        const pnlCls = getPnlColorClass(item.pnl);
+        const pnlSign = item.pnl > 0 ? '+' : '';
+        const roiSign = item.roi > 0 ? '+' : '';
+
+        return `
+          <tr class="hover:bg-slate-800/50 transition cursor-pointer group" onclick="openDetailModal(${item.id})">
+            <td class="py-3 px-4 whitespace-nowrap">
+              <span class="px-2 py-0.5 rounded text-[11px] font-medium ${item.account === 'hou' ? 'bg-indigo-500/10 text-indigo-300 border border-indigo-500/20' : 'bg-pink-500/10 text-pink-300 border border-pink-500/20'}">
+                ${item.accountName}
+              </span>
+            </td>
+            <td class="py-3 px-4">
+              <div class="flex items-center gap-2">
+                <span class="font-mono font-bold text-white text-xs">${item.code}</span>
+                <span class="font-medium text-slate-200">${item.name}</span>
+                <span class="text-[10px] text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded">${item.categoryName}</span>
+              </div>
+              <div class="text-[11px] text-slate-400 truncate max-w-xs mt-0.5">${item.note}</div>
+            </td>
+            <td class="py-3 px-4 text-right font-mono font-medium text-slate-200">
+              ${item.shares.toLocaleString()} 股
+            </td>
+            <td class="py-3 px-4 text-right font-mono text-slate-300">
+              ${formatNumber(item.costPrice, 2)}
+            </td>
+            <td class="py-3 px-4 text-right font-mono font-bold text-white">
+              ${formatNumber(item.currentPrice, 2)}
+            </td>
+            <td class="py-3 px-4 text-right font-mono font-bold text-white">
+              ${formatCurrency(item.marketValue)}
+            </td>
+            <td class="py-3 px-4 text-right font-mono font-bold ${pnlCls}">
+              ${pnlSign}${formatCurrency(item.pnl, '')}
+            </td>
+            <td class="py-3 px-4 text-right font-mono font-bold ${pnlCls}">
+              ${roiSign}${formatNumber(item.roi, 2)}%
+            </td>
+            <td class="py-3 px-4 text-center">
+              <button class="px-2.5 py-1 text-[11px] bg-slate-800 hover:bg-blue-600 text-slate-300 hover:text-white rounded-lg transition border border-slate-700 hover:border-blue-500">
+                查看
+              </button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    // Render History Table
+    function renderHistoryTable() {
+      const tbody = document.getElementById('history-tbody');
+      tbody.innerHTML = RAW_DATA.history.map(row => {
+        const pnlCls = getPnlColorClass(row.pnl);
+        const changeCls = getPnlColorClass(row.change);
+        const changeSign = row.change > 0 ? '+' : '';
+        const pnlSign = row.pnl > 0 ? '+' : '';
+        const isLatest = row.date === '2026/10/16';
+
+        return `
+          <tr class="hover:bg-slate-800/40 transition ${isLatest ? 'bg-blue-950/20' : ''}">
+            <td class="py-3 px-4 font-mono font-semibold whitespace-nowrap flex items-center gap-1.5">
+              ${row.date}
+              ${isLatest ? '<span class="px-1.5 py-0.2 rounded text-[10px] bg-blue-500/20 text-blue-400 font-sans">最新</span>' : ''}
+            </td>
+            <td class="py-3 px-4 text-right font-mono text-slate-300">${formatCurrency(row.hou)}</td>
+            <td class="py-3 px-4 text-right font-mono text-slate-300">${formatCurrency(row.xie)}</td>
+            <td class="py-3 px-4 text-right font-mono font-bold text-white">${formatCurrency(row.total)}</td>
+            <td class="py-3 px-4 text-right font-mono text-slate-400">${formatCurrency(row.cost)}</td>
+            <td class="py-3 px-4 text-right font-mono font-bold ${pnlCls}">${pnlSign}${formatCurrency(row.pnl, '')}</td>
+            <td class="py-3 px-4 text-right font-mono font-bold ${pnlCls}">${formatNumber(row.roi, 2)}%</td>
+            <td class="py-3 px-4 text-right font-mono font-bold ${changeCls}">${changeSign}${formatCurrency(row.change, '')}</td>
+            <td class="py-3 px-4 text-slate-300 text-[11px]">${row.note}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    // Render Dividends Table
+    function renderDividendsTable() {
+      const tbody = document.getElementById('dividends-tbody');
+      tbody.innerHTML = RAW_DATA.holdings.map(item => {
+        const yieldVal = (item.divPerShare / item.currentPrice) * 100;
+        const monthly = item.divAnnual / 12;
+
+        return `
+          <tr class="hover:bg-slate-800/40 transition">
+            <td class="py-3 px-4 whitespace-nowrap">
+              <span class="px-2 py-0.5 rounded text-[11px] font-medium ${item.account === 'hou' ? 'bg-indigo-500/10 text-indigo-300 border border-indigo-500/20' : 'bg-pink-500/10 text-pink-300 border border-pink-500/20'}">
+                ${item.accountName}
+              </span>
+            </td>
+            <td class="py-3 px-4 font-medium text-white">
+              <span class="font-mono text-blue-400 mr-1.5">${item.code}</span> ${item.name}
+            </td>
+            <td class="py-3 px-4 text-right font-mono">${item.shares.toLocaleString()}</td>
+            <td class="py-3 px-4 text-right font-mono">${formatNumber(item.currentPrice, 2)}</td>
+            <td class="py-3 px-4 text-center">
+              <span class="px-2 py-0.5 rounded-full text-[10px] bg-slate-800 text-amber-300 border border-slate-700">${item.divFreq}</span>
+            </td>
+            <td class="py-3 px-4 text-right font-mono text-slate-200">${formatNumber(item.divPerShare, 3)} 元</td>
+            <td class="py-3 px-4 text-right font-mono font-bold text-amber-400">${formatCurrency(item.divAnnual)}</td>
+            <td class="py-3 px-4 text-right font-mono text-emerald-400">${formatNumber(yieldVal, 2)}%</td>
+            <td class="py-3 px-4 text-right font-mono font-semibold text-white">${formatCurrency(monthly)}</td>
+            <td class="py-3 px-4 text-slate-400 text-[11px]">${item.note}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    // Render US Stocks Table
+    function renderUsTable() {
+      const tbody = document.getElementById('us-tbody');
+      tbody.innerHTML = RAW_DATA.usHoldings.map(item => {
+        return `
+          <tr class="hover:bg-slate-800/40 transition">
+            <td class="py-3 px-4 font-mono font-bold text-white">
+              <span class="text-xs text-blue-400">${item.market}:</span>${item.code}
+            </td>
+            <td class="py-3 px-4 font-medium text-slate-200">${item.name}</td>
+            <td class="py-3 px-4 text-right font-mono">${item.shares.toLocaleString()} 股</td>
+            <td class="py-3 px-4 text-right font-mono text-slate-300">$${formatNumber(item.priceUsd, 2)}</td>
+            <td class="py-3 px-4 text-right font-mono font-bold text-emerald-400">$${formatNumber(item.valueUsd, 2)}</td>
+            <td class="py-3 px-4 text-right font-mono font-bold text-white">${formatCurrency(item.valueTwd)}</td>
+            <td class="py-3 px-4 text-slate-400 text-[11px]">${item.note}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    // Render Transactions Table
+    function renderTxTable(filterText = '') {
+      const tbody = document.getElementById('tx-tbody');
+      const filtered = RAW_DATA.transactions.filter(t => {
+        if (!filterText) return true;
+        const q = filterText.toLowerCase();
+        return t.code.toLowerCase().includes(q) || t.name.toLowerCase().includes(q) || t.account.toLowerCase().includes(q);
+      });
+
+      tbody.innerHTML = filtered.map(t => {
+        const isBuy = t.type.includes('買進');
+        const netCls = isBuy ? 'text-slate-300' : 'text-amber-400 font-bold';
+
+        return `
+          <tr class="hover:bg-slate-800/40 transition">
+            <td class="py-3 px-4 font-mono whitespace-nowrap text-slate-300">${t.date}</td>
+            <td class="py-3 px-4 whitespace-nowrap">
+              <span class="px-2 py-0.5 rounded text-[11px] font-medium ${t.account.includes('侯') ? 'bg-indigo-500/10 text-indigo-300 border border-indigo-500/20' : 'bg-pink-500/10 text-pink-300 border border-pink-500/20'}">
+                ${t.account}
+              </span>
+            </td>
+            <td class="py-3 px-4 font-medium text-white">
+              <span class="font-mono text-blue-400 mr-1">${t.code}</span> ${t.name}
+            </td>
+            <td class="py-3 px-4 text-center">
+              <span class="px-2 py-0.5 rounded text-[11px] font-medium ${isBuy ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'}">
+                ${t.type}
+              </span>
+            </td>
+            <td class="py-3 px-4 text-right font-mono">${t.shares.toLocaleString()}</td>
+            <td class="py-3 px-4 text-right font-mono">${formatNumber(t.price, 2)}</td>
+            <td class="py-3 px-4 text-right font-mono ${netCls}">${formatCurrency(t.net)}</td>
+            <td class="py-3 px-4 text-slate-400 text-[11px]">${t.note}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    // Init Charts
+    function initCharts() {
+      const labels = RAW_DATA.history.map(h => h.date.replace('2026/', ''));
+      const values = RAW_DATA.history.map(h => h.total);
+      const costs = RAW_DATA.history.map(h => h.cost);
+      const changes = RAW_DATA.history.map(h => h.change);
+
+      // Line Chart (History Total vs Cost)
+      const ctxLine = document.getElementById('chart-history');
+      if (ctxLine) {
+        if (historyChartInstance) historyChartInstance.destroy();
+        historyChartInstance = new Chart(ctxLine, {
+          type: 'line',
+          data: {
+            labels: labels,
+            datasets: [
+              {
+                label: '全戶總市值 (TWD)',
+                data: values,
+                borderColor: '#38bdf8',
+                backgroundColor: 'rgba(56, 189, 248, 0.1)',
+                borderWidth: 2.5,
+                fill: true,
+                tension: 0.3,
+                pointBackgroundColor: '#38bdf8',
+                pointRadius: 4,
+                pointHoverRadius: 6
+              },
+              {
+                label: '總投入成本 (TWD)',
+                data: costs,
+                borderColor: '#94a3b8',
+                borderWidth: 1.5,
+                borderDash: [5, 5],
+                fill: false,
+                tension: 0,
+                pointRadius: 2
+              }
+            ]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: {
+                position: 'top',
+                labels: { color: '#94a3b8', font: { size: 11 } }
+              },
+              tooltip: {
+                callbacks: {
+                  label: function(ctx) {
+                    return ctx.dataset.label + ': ' + formatCurrency(ctx.raw);
+                  }
+                }
+              }
+            },
+            scales: {
+              x: {
+                grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                ticks: { color: '#64748b', font: { size: 10 } }
+              },
+              y: {
+                grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                ticks: {
+                  color: '#64748b',
+                  font: { size: 10 },
+                  callback: function(v) { return (v / 10000).toFixed(0) + '萬'; }
+                }
+              }
+            }
+          }
+        });
+      }
+
+      // Bar Chart (Daily Change)
+      const ctxBar = document.getElementById('chart-daily-change');
+      if (ctxBar) {
+        if (dailyChangeChartInstance) dailyChangeChartInstance.destroy();
+        const barColors = changes.map(v => {
+          if (v === 0) return '#64748b';
+          if (isTaiwanColor) {
+            return v > 0 ? 'rgba(244, 63, 94, 0.8)' : 'rgba(16, 185, 129, 0.8)';
+          } else {
+            return v > 0 ? 'rgba(16, 185, 129, 0.8)' : 'rgba(244, 63, 94, 0.8)';
+          }
+        });
+
+        dailyChangeChartInstance = new Chart(ctxBar, {
+          type: 'bar',
+          data: {
+            labels: labels,
+            datasets: [{
+              label: '單日資產增減 (TWD)',
+              data: changes,
+              backgroundColor: barColors,
+              borderRadius: 6
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                callbacks: {
+                  label: function(ctx) {
+                    const v = ctx.raw;
+                    return '單日變動: ' + (v > 0 ? '+' : '') + formatCurrency(v);
+                  }
+                }
+              }
+            },
+            scales: {
+              x: {
+                grid: { display: false },
+                ticks: { color: '#64748b', font: { size: 10 } }
+              },
+              y: {
+                grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                ticks: {
+                  color: '#64748b',
+                  font: { size: 10 },
+                  callback: function(v) { return (v / 10000).toFixed(0) + '萬'; }
+                }
+              }
+            }
+          }
+        });
+      }
+    }
+
+    // Open Detail Modal for a stock
+    window.openDetailModal = function(stockId) {
+      const stock = RAW_DATA.holdings.find(h => h.id === stockId);
+      if (!stock) return;
+
+      document.getElementById('modal-code').textContent = stock.code;
+      document.getElementById('modal-name').textContent = stock.name;
+
+      const pnlCls = getPnlColorClass(stock.pnl);
+      const pnlSign = stock.pnl > 0 ? '+' : '';
+      const roiSign = stock.roi > 0 ? '+' : '';
+
+      document.getElementById('modal-body').innerHTML = `
+        <div class="grid grid-cols-2 gap-3 bg-slate-900 p-4 rounded-xl border border-slate-800">
+          <div>
+            <span class="text-xs text-slate-500">所屬帳戶</span>
+            <div class="font-bold text-white text-sm mt-0.5">${stock.accountName}</div>
+          </div>
+          <div>
+            <span class="text-xs text-slate-500">標的分類</span>
+            <div class="font-bold text-blue-400 text-sm mt-0.5">${stock.categoryName}</div>
+          </div>
+          <div>
+            <span class="text-xs text-slate-500">持有股數</span>
+            <div class="font-bold font-mono text-white text-sm mt-0.5">${stock.shares.toLocaleString()} 股</div>
+          </div>
+          <div>
+            <span class="text-xs text-slate-500">目前市值</span>
+            <div class="font-bold font-mono text-white text-sm mt-0.5">${formatCurrency(stock.marketValue)}</div>
+          </div>
+          <div>
+            <span class="text-xs text-slate-500">基準買進均價</span>
+            <div class="font-mono text-slate-300 text-sm mt-0.5">${formatNumber(stock.costPrice, 2)} 元</div>
+          </div>
+          <div>
+            <span class="text-xs text-slate-500">最新收盤現價</span>
+            <div class="font-mono font-bold text-white text-sm mt-0.5">${formatNumber(stock.currentPrice, 2)} 元</div>
+          </div>
+          <div>
+            <span class="text-xs text-slate-500">未實現損益</span>
+            <div class="font-mono font-bold text-sm mt-0.5 ${pnlCls}">${pnlSign}${formatCurrency(stock.pnl)}</div>
+          </div>
+          <div>
+            <span class="text-xs text-slate-500">累計報酬率</span>
+            <div class="font-mono font-bold text-sm mt-0.5 ${pnlCls}">${roiSign}${formatNumber(stock.roi, 2)}%</div>
+          </div>
+        </div>
+
+        <div class="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl space-y-1">
+          <div class="flex justify-between items-center text-xs">
+            <span class="text-amber-400 font-semibold">年度預估股利收入</span>
+            <span class="font-mono font-bold text-white">${formatCurrency(stock.divAnnual)}</span>
+          </div>
+          <div class="flex justify-between items-center text-xs text-slate-400">
+            <span>配息頻率: ${stock.divFreq} (每股 ${formatNumber(stock.divPerShare, 2)} 元)</span>
+            <span>月均股利: ${formatCurrency(stock.divAnnual / 12)}</span>
+          </div>
+        </div>
+
+        <div class="text-xs text-slate-400 bg-slate-900/60 p-3 rounded-xl border border-slate-800/80">
+          <strong class="text-slate-300">最新動態與備註：</strong>
+          <p class="mt-1 leading-relaxed text-slate-300">${stock.note}</p>
+        </div>
+      `;
+
+      document.getElementById('detail-modal').classList.remove('hidden');
+    };
+
+    // Simulator logic
+    function initSimulator() {
+      const selectEl = document.getElementById('sim-stock-select');
+      selectEl.innerHTML = RAW_DATA.holdings.map(h => {
+        return `<option value="${h.id}">[${h.accountName}] ${h.code} ${h.name} (現價: ${h.currentPrice}元)</option>`;
+      }).join('');
+
+      function updateSimulation() {
+        const stockId = Number(selectEl.value);
+        const stock = RAW_DATA.holdings.find(h => h.id === stockId);
+        if (!stock) return;
+
+        const inputPrice = Number(document.getElementById('sim-price-input').value);
+        if (isNaN(inputPrice) || inputPrice <= 0) return;
+
+        const origVal = stock.marketValue;
+        const newVal = stock.shares * inputPrice;
+        const diff = newVal - origVal;
+        const newTotalVal = RAW_DATA.accounts.all.value + diff;
+
+        document.getElementById('sim-res-orig-val').textContent = formatCurrency(origVal);
+        document.getElementById('sim-res-new-val').textContent = formatCurrency(newVal);
+
+        const diffEl = document.getElementById('sim-res-diff');
+        diffEl.textContent = (diff >= 0 ? '+' : '') + formatCurrency(diff);
+        diffEl.className = 'text-sm font-bold mt-1 ' + getPnlColorClass(diff);
+
+        document.getElementById('sim-res-tot-val').textContent = formatCurrency(newTotalVal);
+      }
+
+      selectEl.addEventListener('change', () => {
+        const stock = RAW_DATA.holdings.find(h => h.id === Number(selectEl.value));
+        if (stock) {
+          document.getElementById('sim-price-input').value = stock.currentPrice;
+          updateSimulation();
+        }
+      });
+
+      document.getElementById('sim-price-input').addEventListener('input', updateSimulation);
+
+      // Preset buttons
+      document.querySelectorAll('.sim-preset-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          const code = e.currentTarget.getAttribute('data-code');
+          const targetPrice = Number(e.currentTarget.getAttribute('data-price'));
+          const targetStock = RAW_DATA.holdings.find(h => h.code === code);
+          if (targetStock) {
+            selectEl.value = targetStock.id;
+            document.getElementById('sim-price-input').value = targetPrice;
+            updateSimulation();
+            showToast(`已套用 ${targetStock.name} 試算情境: ${targetPrice} 元`);
+          }
+        });
+      });
+
+      // Trigger initial selection
+      if (RAW_DATA.holdings.length > 0) {
+        document.getElementById('sim-price-input').value = RAW_DATA.holdings[0].currentPrice;
+        updateSimulation();
+      }
+    }
+
+    // Setup Event Listeners
+    function setupEventListeners() {
+      // Account Toggle
+      document.querySelectorAll('.acc-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          document.querySelectorAll('.acc-btn').forEach(b => {
+            b.classList.remove('active', 'bg-blue-600', 'text-white', 'shadow-sm');
+            b.classList.add('text-slate-400');
+          });
+          const target = e.currentTarget;
+          target.classList.add('active', 'bg-blue-600', 'text-white', 'shadow-sm');
+          target.classList.remove('text-slate-400');
+          currentAccount = target.getAttribute('data-acc');
+          renderOverviewCards();
+          renderHoldingsTable();
+        });
+      });
+
+      // Category filter buttons
+      document.querySelectorAll('.cat-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          document.querySelectorAll('.cat-btn').forEach(b => {
+            b.classList.remove('active', 'bg-blue-600', 'text-white');
+            b.classList.add('bg-slate-800', 'text-slate-300');
+          });
+          const target = e.currentTarget;
+          target.classList.add('active', 'bg-blue-600', 'text-white');
+          target.classList.remove('bg-slate-800', 'text-slate-300');
+          currentCategory = target.getAttribute('data-cat');
+          renderHoldingsTable();
+        });
+      });
+
+      // Search input
+      document.getElementById('search-input').addEventListener('input', (e) => {
+        searchQuery = e.target.value;
+        renderHoldingsTable();
+      });
+
+      // Sort Select
+      document.getElementById('sort-select').addEventListener('change', (e) => {
+        sortKey = e.target.value;
+        renderHoldingsTable();
+      });
+
+      // Tab switcher
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          const tabId = e.currentTarget.getAttribute('data-tab');
+          document.querySelectorAll('.tab-btn').forEach(b => {
+            b.classList.remove('active', 'border-blue-500', 'text-blue-400');
+            b.classList.add('border-transparent', 'text-slate-400');
+          });
+          e.currentTarget.classList.add('active', 'border-blue-500', 'text-blue-400');
+          e.currentTarget.classList.remove('border-transparent', 'text-slate-400');
+
+          document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
+          const targetTab = document.getElementById(tabId);
+          if (targetTab) {
+            targetTab.classList.remove('hidden');
+            if (tabId === 'tab-charts') {
+              setTimeout(() => initCharts(), 50);
+            }
+          }
+        });
+      });
+
+      // Color Mode Toggle
+      document.getElementById('btn-color-mode').addEventListener('click', () => {
+        isTaiwanColor = !isTaiwanColor;
+        const icon = document.getElementById('color-mode-icon');
+        const text = document.getElementById('color-mode-text');
+        if (isTaiwanColor) {
+          icon.textContent = '🇹🇼';
+          text.textContent = '台股配色 (紅賺綠賠)';
+          showToast('已切換為台股配色習慣 (紅漲綠跌)');
+        } else {
+          icon.textContent = '🌍';
+          text.textContent = '國際配色 (綠賺紅賠)';
+          showToast('已切換為國際配色習慣 (綠漲紅跌)');
+        }
+        renderOverviewCards();
+        renderHoldingsTable();
+        renderHistoryTable();
+        if (historyChartInstance) initCharts();
+      });
+
+      // Modal Close buttons
+      document.getElementById('btn-close-modal').addEventListener('click', () => {
+        document.getElementById('detail-modal').classList.add('hidden');
+      });
+      document.getElementById('btn-modal-done').addEventListener('click', () => {
+        document.getElementById('detail-modal').classList.add('hidden');
+      });
+      document.getElementById('detail-modal').addEventListener('click', (e) => {
+        if (e.target.id === 'detail-modal') {
+          document.getElementById('detail-modal').classList.add('hidden');
+        }
+      });
+
+      // Copy summary button
+      document.getElementById('btn-copy-summary').addEventListener('click', () => {
+        const acc = RAW_DATA.accounts.all;
+        const text = `【股票庫存與每日總值紀錄 (2026/10/16 最新收盤)】
+` +
+          `全戶總市值: NT$ ${acc.value.toLocaleString()}
+` +
+          `總投入成本: NT$ ${acc.cost.toLocaleString()}
+` +
+          `未實現損益: NT$ ${acc.pnl.toLocaleString()} (${acc.roi}%)
+` +
+          `今日單日變動: NT$ ${acc.dailyChange.toLocaleString()}
+` +
+          `閒置現金儲備: NT$ ${acc.cash.toLocaleString()}
+` +
+          `預估年度股利: NT$ ${acc.annualDividend.toLocaleString()} (月均 NT$ ${acc.monthlyDividend.toLocaleString()})`;
+        
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(() => {
+            showToast('已成功複製全戶資產結算摘要至剪貼簿！');
+          }).catch(() => {
+            fallbackCopy(text);
+          });
+        } else {
+          fallbackCopy(text);
+        }
+      });
+
+      function fallbackCopy(text) {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        try {
+          document.execCommand('copy');
+          showToast('已複製全戶資產結算摘要至剪貼簿！');
+        } catch (err) {
+          showToast('複製失敗，請手動複製');
+        }
+        document.body.removeChild(ta);
+      }
+
+      // Tx search
+      document.getElementById('tx-search').addEventListener('input', (e) => {
+        renderTxTable(e.target.value);
+      });
+    }
+
+    // Bootstrap
+    window.addEventListener('DOMContentLoaded', () => {
+      renderOverviewCards();
+      renderHoldingsTable();
+      renderHistoryTable();
+      renderDividendsTable();
+      renderUsTable();
+      renderTxTable();
+      initSimulator();
+      setupEventListeners();
+    });
+  </script>
+</body>
+</html>
